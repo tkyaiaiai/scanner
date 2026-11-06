@@ -3,42 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>高效能條碼掃瞄器</title>
+    <title>條碼 & PDF417 掃瞄器</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- 引入穩定的 html5-qrcode 庫 -->
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <!-- 使用穩定版的 html5-qrcode -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
         body { -webkit-user-select: none; user-select: none; }
         .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        /* 隱藏 html5-qrcode 預設的按鈕 UI，改用我們自訂的 UI */
+        #reader video { object-fit: cover !important; border-radius: 1rem; }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between">
 
     <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
         <h1 class="text-lg font-bold flex items-center gap-2">
-            <i data-lucide="scan-line" class="text-indigo-400"></i> 條碼掃瞄器
+            <i data-lucide="scan-line" class="text-indigo-400"></i> 條碼 & QR 掃瞄器
         </h1>
     </header>
 
     <main class="flex-1 flex flex-col p-4 max-w-md mx-auto w-full gap-4 pb-24">
         
-        <!-- html5-qrcode 專用容器 -->
+        <!-- 掃瞄攝影機區域 -->
         <div class="relative w-full aspect-[3/4] bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col items-center justify-center">
             <div id="reader" class="w-full h-full"></div>
         </div>
 
+        <!-- 結果顯示區 -->
         <div id="result-card" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg hidden">
             <div class="flex items-center justify-between mb-2">
                 <span id="result-format" class="text-xs font-semibold px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded">格式</span>
                 <span class="text-xs text-slate-500">剛剛</span>
             </div>
             <div class="text-sm font-mono break-all bg-slate-950 p-3 rounded-xl border border-slate-800/80 mb-3 max-h-32 overflow-y-auto" id="result-text">
-                掃瞄結果...
+                掃瞄結果顯示在此...
             </div>
             <div class="flex gap-2">
-                <button id="action-btn" onclick="handleAction()" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition flex items-center justify-center gap-2">
-                    <i data-lucide="external-link" class="w-4 h-4"></i> 開啟連結
+                <button id="action-btn" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition flex items-center justify-center gap-2">
+                    <i data-lucide="external-link" class="w-4 h-4"></i> 開啟 / 搜尋
                 </button>
                 <button onclick="copyResult()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl transition flex items-center justify-center">
                     <i data-lucide="copy" class="w-4 h-4"></i>
@@ -50,6 +53,7 @@
     <script>
         lucide.createIcons();
         let lastResult = "";
+        let html5QrCode = null;
 
         function onScanSuccess(decodedText, decodedResult) {
             if (decodedText !== lastResult) {
@@ -57,7 +61,12 @@
                 if (navigator.vibrate) navigator.vibrate(100);
 
                 document.getElementById('result-card').classList.remove('hidden');
-                document.getElementById('result-format').innerText = decodedResult.result.format.formatName || 'BARCODE';
+                
+                const formatName = decodedResult.result && decodedResult.result.format 
+                    ? decodedResult.result.format.formatName 
+                    : 'UNKNOWN';
+                
+                document.getElementById('result-format').innerText = formatName;
                 document.getElementById('result-text').innerText = decodedText;
 
                 let actionBtn = document.getElementById('action-btn');
@@ -74,22 +83,44 @@
             }
         }
 
-        // 初始化掃瞄器，強制指定後置鏡頭
-        const html5QrCode = new Html5Qrcode("reader");
-        html5QrCode.start(
-            { facingMode: "environment" },
-            {
+        // 初始化掃瞄，明確指定支援所有格式 (包括 PDF417)
+        function initScanner() {
+            html5QrCode = new Html5Qrcode("reader");
+            
+            // 完整支援格式列表
+            const formatsToSupport = [
+                Html5QrcodeSupportedFormats.QR_CODE,
+                Html5QrcodeSupportedFormats.PDF_417,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.DATA_MATRIX
+            ];
+
+            const config = {
                 fps: 15,
-                qrbox: { width: 250, height: 250 },
-                aspectRatio: 1.333334
-            },
-            onScanSuccess,
-            (errorMessage) => {
-                // 忽略未偵測到時的頻繁錯誤 log
-            }
-        ).catch(err => {
-            alert("無法啟動相機: " + err);
-        });
+                // 矩形採樣框，容納長條形及 PDF417 碼
+                qrbox: (viewfinderWidth, viewfinderHeight) => {
+                    return {
+                        width: Math.floor(viewfinderWidth * 0.85),
+                        height: Math.floor(viewfinderHeight * 0.5)
+                    };
+                },
+                formatsToSupport: formatsToSupport
+            };
+
+            html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                onScanSuccess,
+                (errorMessage) => { /* 忽略失敗採樣 */ }
+            ).catch(err => {
+                console.error("相機啟動錯誤: ", err);
+            });
+        }
 
         function copyResult() {
             const text = document.getElementById('result-text').innerText;
@@ -97,6 +128,8 @@
                 alert('已複製到剪貼簿！');
             });
         }
+
+        window.addEventListener('DOMContentLoaded', initScanner);
     </script>
 </body>
 </html>
