@@ -3,12 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>iOS / Android Barcode & QR Scanner</title>
-    <!-- Tailwind CSS CDN -->
+    <title>全方向 Barcode & QR Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- html5-qrcode fallback library -->
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         body { -webkit-user-select: none; user-select: none; }
@@ -17,39 +14,34 @@
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between">
 
-    <!-- 頂部標題列 -->
     <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
         <h1 class="text-lg font-bold flex items-center gap-2">
-            <i data-lucide="scan-line" class="text-indigo-400"></i> 流動條碼掃瞄器
+            <i data-lucide="scan-line" class="text-indigo-400"></i> 強力條碼掃瞄器
         </h1>
-        <div class="flex items-center gap-2">
-            <button id="torch-btn" onclick="toggleTorch()" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-300 transition hidden">
-                <i data-lucide="flashlight" class="w-5 h-5"></i>
-            </button>
-        </div>
+        <span class="text-xs px-2 py-1 bg-indigo-500/20 text-indigo-300 rounded-full">支援垂直/全角度</span>
     </header>
 
-    <!-- 主要內容區 -->
     <main class="flex-1 flex flex-col p-4 max-w-md mx-auto w-full gap-4 pb-24">
         
-        <!-- 鏡頭掃瞄區塊 -->
         <div id="scanner-container" class="relative w-full aspect-[3/4] bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col items-center justify-center">
-            <!-- 視訊畫面 -->
             <video id="webcam-video" class="absolute inset-0 w-full h-full object-cover" autoplay playsinline muted></video>
             
-            <!-- 掃瞄引導框 -->
-            <div class="absolute inset-12 border-2 border-indigo-500/60 rounded-xl pointer-events-none flex items-center justify-center">
-                <div class="absolute w-full h-0.5 bg-red-500/80 animate-pulse top-1/2 -translate-y-1/2"></div>
+            <!-- 隱藏的 Canvas 用於旋轉畫面進行二次採樣 -->
+            <canvas id="rotate-canvas" class="hidden"></canvas>
+
+            <div class="absolute inset-8 border-2 border-indigo-500/60 rounded-xl pointer-events-none flex items-center justify-center">
+                <!-- 水平與垂直掃瞄導向線 -->
+                <div class="absolute w-full h-0.5 bg-red-500/80 animate-pulse"></div>
+                <div class="absolute h-full w-0.5 bg-red-500/80 animate-pulse"></div>
             </div>
 
-            <!-- 啟動按鈕 (當權限未給或未開始時顯示) -->
             <div id="start-screen" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center gap-4 p-6 text-center z-10">
                 <div class="w-16 h-16 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center border border-indigo-500/30">
                     <i data-lucide="camera" class="w-8 h-8"></i>
                 </div>
                 <div>
-                    <h2 class="text-base font-semibold">準備就緒</h2>
-                    <p class="text-xs text-slate-400 mt-1">點擊下方按鈕啟動相機開始掃瞄 QR Code 或 Barcode</p>
+                    <h2 class="text-base font-semibold">全方向鏡頭掃瞄</h2>
+                    <p class="text-xs text-slate-400 mt-1">支援直向、橫向、PDF417 及各類高密度條碼</p>
                 </div>
                 <button onclick="startScanner()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl shadow-lg transition flex items-center gap-2">
                     <i data-lucide="play" class="w-4 h-4"></i> 啟動相機
@@ -57,18 +49,17 @@
             </div>
         </div>
 
-        <!-- 掃瞄結果卡片 -->
         <div id="result-card" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg hidden">
             <div class="flex items-center justify-between mb-2">
                 <span id="result-format" class="text-xs font-semibold px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded">Format</span>
                 <span class="text-xs text-slate-500" id="result-time">剛剛</span>
             </div>
             <div class="text-sm font-mono break-all bg-slate-950 p-3 rounded-xl border border-slate-800/80 mb-3 max-h-32 overflow-y-auto" id="result-text">
-                掃瞄結果將顯示在此...
+                解析結果顯示在此...
             </div>
             <div class="flex gap-2">
                 <button id="action-btn" onclick="handleAction()" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition flex items-center justify-center gap-2">
-                    <i data-lucide="external-link" class="w-4 h-4"></i> 開啟連結
+                    <i data-lucide="external-link" class="w-4 h-4"></i> 開啟 / 搜尋
                 </button>
                 <button onclick="copyResult()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl transition flex items-center justify-center">
                     <i data-lucide="copy" class="w-4 h-4"></i>
@@ -77,41 +68,32 @@
         </div>
     </main>
 
-    <!-- 底部導覽列 -->
-    <nav class="fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-md border-t border-slate-800 px-6 py-3 safe-bottom z-50 flex justify-around">
-        <button onclick="switchTab('scan')" class="flex flex-col items-center gap-1 text-indigo-400">
-            <i data-lucide="scan" class="w-5 h-5"></i>
-            <span class="text-[10px]">掃瞄</span>
-        </button>
-        <button onclick="switchTab('history')" class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200">
-            <i data-lucide="history" class="w-5 h-5"></i>
-            <span class="text-[10px]">歷史</span>
-        </button>
-    </nav>
-
-    <!-- JavaScript 邏輯 -->
     <script>
         lucide.createIcons();
 
         let videoElement = document.getElementById('webcam-video');
+        let canvasElement = document.getElementById('rotate-canvas');
+        let canvasCtx = canvasElement.getContext('2d');
         let mediaStream = null;
         let barcodeDetector = null;
         let isScanning = false;
         let lastScannedText = "";
+        let frameCounter = 0;
 
         async function startScanner() {
             try {
-                // 檢查瀏覽器是否支援原生 BarcodeDetector
                 if ('BarcodeDetector' in window) {
-                    const supportedFormats = await BarcodeDetector.getSupportedFormats();
-                    barcodeDetector = new BarcodeDetector({ 
-                        formats: supportedFormats.length ? supportedFormats : ['qr_code', 'ean_13', 'code_128', 'upc_a'] 
-                    });
+                    // 強制要求包含 PDF417 及所有主流 1D 格式
+                    const formats = ['qr_code', 'pdf417', 'code_128', 'code_39', 'code_93', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf', 'aztec', 'data_matrix'];
+                    barcodeDetector = new BarcodeDetector({ formats: formats });
                 }
 
-                // 啟動鏡頭（優先調用後置主鏡頭）
                 mediaStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+                    video: { 
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1920 }, // 提高解析度以應對高密度條碼
+                        height: { ideal: 1080 } 
+                    }
                 });
 
                 videoElement.srcObject = mediaStream;
@@ -122,7 +104,7 @@
                 requestAnimationFrame(scanLoop);
 
             } catch (err) {
-                alert('無法啟動相機，請確認是否已給予相機權限或使用 HTTPS 連線。錯誤: ' + err.message);
+                alert('相機啟動失敗: ' + err.message);
             }
         }
 
@@ -130,9 +112,24 @@
             if (!isScanning) return;
 
             if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+                frameCounter++;
+
                 if (barcodeDetector) {
                     try {
-                        const barcodes = await barcodeDetector.detect(videoElement);
+                        // 1. 原向（0度）試掃
+                        let barcodes = await barcodeDetector.detect(videoElement);
+                        
+                        // 2. 如果原向掃不到，每隔幾幀將圖像旋轉 90 度交給解碼器採樣
+                        if (barcodes.length === 0 && frameCounter % 3 === 0) {
+                            canvasElement.width = videoElement.videoHeight;
+                            canvasElement.height = videoElement.videoWidth;
+                            canvasCtx.translate(canvasElement.width / 2, canvasElement.height / 2);
+                            canvasCtx.rotate(90 * Math.PI / 180);
+                            canvasCtx.drawImage(videoElement, -videoElement.videoWidth / 2, -videoElement.videoHeight / 2);
+                            
+                            barcodes = await barcodeDetector.detect(canvasElement);
+                        }
+
                         if (barcodes.length > 0) {
                             const code = barcodes[0];
                             if (code.rawValue !== lastScannedText) {
@@ -140,18 +137,16 @@
                                 onDetected(code.rawValue, code.format);
                             }
                         }
-                    } catch (e) {
-                        // 略過單次偵測錯誤
-                    }
+                    } catch (e) {}
                 }
             }
+
             if (isScanning) {
                 requestAnimationFrame(scanLoop);
             }
         }
 
         function onDetected(text, format) {
-            // 播放震動回饋（如果支援）
             if (navigator.vibrate) navigator.vibrate(100);
 
             document.getElementById('result-card').classList.remove('hidden');
@@ -168,7 +163,6 @@
             }
             lucide.createIcons();
             
-            // 3秒後重置防重複掃瞄
             setTimeout(() => { lastScannedText = ""; }, 3000);
         }
 
@@ -177,12 +171,6 @@
             navigator.clipboard.writeText(text).then(() => {
                 alert('已複製到剪貼簿！');
             });
-        }
-
-        function switchTab(tab) {
-            if (tab === 'history') {
-                alert('歷史紀錄功能開發中...');
-            }
         }
     </script>
 </body>
