@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>條碼智能快掃工具</title>
+    <title>iOS Barcode & QR Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         body { -webkit-user-select: none; user-select: none; }
         .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
@@ -16,199 +15,124 @@
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between">
 
-    <!-- 頂部導覽列 -->
-    <header class="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
-        <h1 class="text-base font-bold flex items-center gap-2">
-            <i data-lucide="scan-line" class="text-indigo-400"></i> 快掃引擎
+    <!-- 頂部標題列 -->
+    <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
+        <h1 class="text-lg font-bold flex items-center gap-2">
+            <i data-lucide="scan-line" class="text-indigo-400"></i> 流動條碼掃瞄器
         </h1>
         <div class="flex items-center gap-2">
             <button id="torch-btn" onclick="toggleTorch()" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-300 transition hidden" title="手電筒">
-                <i data-lucide="flashlight" class="w-4 h-4"></i>
+                <i data-lucide="flashlight" class="w-5 h-5"></i>
             </button>
         </div>
     </header>
 
-    <!-- 主要內容區 -->
-    <main class="flex-1 flex flex-col p-4 max-w-md mx-auto w-full gap-4 pb-24 relative">
+    <!-- 主要內容區 (第一版經典佈局) -->
+    <main class="flex-1 flex flex-col p-4 max-w-md mx-auto w-full gap-4 pb-24">
         
         <!-- Tab 1: 掃瞄頁面 -->
-        <div id="tab-scan" class="flex flex-col gap-4 flex-1">
-            <div class="relative w-full flex-1 min-h-[60vh] bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col items-center justify-center">
+        <div id="tab-scan" class="flex flex-col gap-4">
+            <!-- 鏡頭區域 -->
+            <div class="relative w-full aspect-[3/4] bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col items-center justify-center">
                 <div id="reader" class="w-full h-full"></div>
-                
+
                 <!-- 相冊上傳按鈕 -->
-                <label class="absolute bottom-4 right-4 bg-slate-900/90 backdrop-blur-md border border-slate-700 text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-2 text-slate-200 cursor-pointer shadow-xl active:scale-95 transition z-20">
-                    <i data-lucide="image" class="w-4 h-4 text-indigo-400"></i> 相冊讀取
+                <label class="absolute bottom-3 right-3 bg-slate-900/80 backdrop-blur-md border border-slate-700 text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 text-slate-200 cursor-pointer shadow-lg active:scale-95 transition z-20">
+                    <i data-lucide="image" class="w-4 h-4 text-indigo-400"></i> 相冊掃瞄
                     <input type="file" id="qr-input-file" accept="image/*" class="hidden" onchange="scanImageFile(this)">
                 </label>
             </div>
-        </div>
 
-        <!-- Tab 2: 建立 QR Code 頁面 -->
-        <div id="tab-generate" class="flex flex-col gap-4 hidden">
-            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col gap-3">
-                <h2 class="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                    <i data-lucide="qr-code" class="w-4 h-4 text-indigo-400"></i> 建立 QR Code
-                </h2>
-                <textarea id="gen-input" placeholder="輸入網址、文字或資料..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 resize-none h-24" oninput="generateQRCode()"></textarea>
-                
-                <div class="flex flex-col items-center justify-center p-4 bg-white rounded-xl my-2">
-                    <div id="qrcode-container"></div>
+            <!-- 第一版經典結果卡片 -->
+            <div id="result-card" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg hidden">
+                <div class="flex items-center justify-between mb-2">
+                    <span id="result-format" class="text-xs font-semibold px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded">FORMAT</span>
+                    <span class="text-xs text-slate-500" id="result-time">剛剛</span>
                 </div>
-
-                <button onclick="downloadQRCode()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition flex items-center justify-center gap-2">
-                    <i data-lucide="download" class="w-4 h-4"></i> 下載圖片
-                </button>
+                <div class="text-sm font-mono break-all bg-slate-950 p-3 rounded-xl border border-slate-800/80 mb-3 max-h-32 overflow-y-auto select-text" id="result-text">
+                    掃瞄結果將顯示在此...
+                </div>
+                <div class="flex gap-2">
+                    <button id="action-btn" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition flex items-center justify-center gap-2">
+                        <i data-lucide="external-link" class="w-4 h-4"></i> 開啟連結
+                    </button>
+                    <button onclick="copyResult()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl transition flex items-center justify-center">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                    </button>
+                </div>
             </div>
         </div>
 
-        <!-- Tab 3: 歷史紀錄頁面 -->
+        <!-- Tab 2: 歷史紀錄頁面 -->
         <div id="tab-history" class="flex flex-col gap-3 hidden">
             <div class="flex items-center justify-between">
-                <h2 class="text-sm font-semibold text-slate-300">盤點與歷史紀錄</h2>
+                <h2 class="text-sm font-semibold text-slate-300">掃瞄歷史紀錄</h2>
                 <div class="flex gap-2">
-                    <button onclick="exportCSV()" class="text-xs bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 px-2.5 py-1.5 rounded-lg flex items-center gap-1">CSV</button>
-                    <button onclick="clearHistory()" class="text-xs bg-red-500/10 border border-red-500/20 text-red-400 px-2.5 py-1.5 rounded-lg">清空</button>
+                    <button onclick="exportCSV()" class="text-xs bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 px-3 py-1.5 rounded-lg flex items-center gap-1">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i> 匯出 CSV
+                    </button>
+                    <button onclick="clearHistory()" class="text-xs bg-red-500/10 border border-red-500/20 text-red-400 px-2.5 py-1.5 rounded-lg">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
                 </div>
             </div>
-            <div id="history-list" class="flex flex-col gap-2 max-h-[65vh] overflow-y-auto"></div>
+            <div id="history-list" class="flex flex-col gap-2 max-h-[60vh] overflow-y-auto"></div>
         </div>
 
     </main>
 
-    <!-- ================= 核心流暢體驗：全螢幕彈出大卡片 Modal ================= -->
-    <div id="result-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
-        <div class="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 transform transition-all scale-95 opacity-0" id="modal-content">
-            
-            <div class="flex items-center justify-between">
-                <span id="modal-format" class="text-xs font-bold px-2.5 py-1 bg-indigo-500/20 text-indigo-300 rounded-full">FORMAT</span>
-                <span class="text-xs text-slate-400" id="modal-time">剛剛</span>
-            </div>
-
-            <!-- 掃出來的內容 -->
-            <div class="text-sm font-mono break-all bg-slate-950 p-3.5 rounded-2xl border border-slate-800 max-h-40 overflow-y-auto select-text text-slate-100" id="modal-text">
-                內容...
-            </div>
-
-            <!-- 主操作按鈕 (例如: 開啟連結 / 查詢商品) -->
-            <button id="modal-primary-btn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg transition flex items-center justify-center gap-2">
-                <i data-lucide="external-link" class="w-4 h-4"></i> 開啟連結
-            </button>
-
-            <!-- 輔助操作按鈕列 (複製 / 分享) -->
-            <div class="grid grid-cols-2 gap-2">
-                <button onclick="copyModalText()" class="py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl transition flex items-center justify-center gap-1.5">
-                    <i data-lucide="copy" class="w-3.5 h-3.5"></i> 複製內容
-                </button>
-                <button onclick="shareModalText()" class="py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl transition flex items-center justify-center gap-1.5">
-                    <i data-lucide="share-2" class="w-3.5 h-3.5"></i> 系統分享
-                </button>
-            </div>
-
-            <!-- 關閉並繼續掃瞄按鈕 -->
-            <button onclick="closeModalAndResume()" class="w-full py-2.5 bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs font-medium rounded-xl transition mt-1">
-                繼續掃瞄下一個
-            </button>
-        </div>
-    </div>
-
-    <!-- 底部 Tab 列 -->
-    <nav class="fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-md border-t border-slate-800 px-6 py-3 safe-bottom z-40 flex justify-around">
+    <!-- 底部 Tab 列 (第一版 iOS 質感) -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-md border-t border-slate-800 px-6 py-3 safe-bottom z-50 flex justify-around">
         <button id="nav-scan-btn" onclick="switchTab('scan')" class="flex flex-col items-center gap-1 text-indigo-400">
             <i data-lucide="scan" class="w-5 h-5"></i>
-            <span class="text-[10px] font-medium">快掃</span>
-        </button>
-        <button id="nav-gen-btn" onclick="switchTab('generate')" class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200">
-            <i data-lucide="qr-code" class="w-5 h-5"></i>
-            <span class="text-[10px] font-medium">生成</span>
+            <span class="text-[10px]">掃瞄</span>
         </button>
         <button id="nav-history-btn" onclick="switchTab('history')" class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200">
             <i data-lucide="history" class="w-5 h-5"></i>
-            <span class="text-[10px] font-medium">紀錄</span>
+            <span class="text-[10px]">歷史紀錄</span>
         </button>
     </nav>
-
-    <div id="toast" class="fixed top-16 left-1/2 -translate-x-1/2 bg-slate-900/90 border border-slate-700 text-slate-200 text-xs px-4 py-2 rounded-full shadow-2xl backdrop-blur-md opacity-0 pointer-events-none transition-opacity duration-300 z-50">
-        提示
-    </div>
 
     <script>
         lucide.createIcons();
 
+        let lastResult = "";
         let html5QrCode = null;
         let isTorchOn = false;
         let scanHistory = JSON.parse(localStorage.getItem('scan_history') || '[]');
-        let currentScannedText = "";
 
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            toast.innerText = message;
-            toast.style.opacity = '1';
-            setTimeout(() => { toast.style.opacity = '0'; }, 2000);
-        }
-
-        // 核心：掃到條碼時立即暫停鏡頭並彈出大卡片
         function onScanSuccess(decodedText, decodedResult) {
-            currentScannedText = decodedText;
-            
-            // 輕微震動反饋
-            if (navigator.vibrate) navigator.vibrate(90);
+            if (decodedText !== lastResult) {
+                lastResult = decodedText;
 
-            // 暫停相機鏡頭掃瞄，避免重複觸發
-            if (html5QrCode && html5QrCode.isScanning) {
-                html5QrCode.pause();
-            }
+                // 震動反饋
+                if (navigator.vibrate) navigator.vibrate(100);
 
-            const formatName = (decodedResult.result && decodedResult.result.format) 
-                ? decodedResult.result.format.formatName 
-                : 'BARCODE';
+                const formatName = (decodedResult.result && decodedResult.result.format) 
+                    ? decodedResult.result.format.formatName 
+                    : 'BARCODE';
 
-            // 儲存到歷史
-            saveToHistory(decodedText, formatName);
+                saveToHistory(decodedText, formatName);
 
-            // 填充彈窗數據
-            document.getElementById('modal-format').innerText = formatName;
-            document.getElementById('modal-text').innerText = decodedText;
-            document.getElementById('modal-time').innerText = new Date().toLocaleTimeString();
+                // 顯示第一版結果卡片
+                document.getElementById('result-card').classList.remove('hidden');
+                document.getElementById('result-format').innerText = formatName;
+                document.getElementById('result-text').innerText = decodedText;
+                document.getElementById('result-time').innerText = new Date().toLocaleTimeString();
 
-            // 設定主按鈕動作
-            let primaryBtn = document.getElementById('modal-primary-btn');
-            if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
-                primaryBtn.innerHTML = '<i data-lucide="external-link" class="w-4 h-4"></i> 開啟網址連結';
-                primaryBtn.onclick = () => window.open(decodedText, '_blank');
-            } else if (/^\d{8,13}$/.test(decodedText)) {
-                primaryBtn.innerHTML = '<i data-lucide="shopping-cart" class="w-4 h-4"></i> 查詢商品 / 格價';
-                primaryBtn.onclick = () => window.open(`https://world.openfoodfacts.org/barcode/${decodedText}`, '_blank');
-            } else {
-                primaryBtn.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i> 網絡 Google 搜尋';
-                primaryBtn.onclick = () => window.open(`https://www.google.com/search?q=${encodeURIComponent(decodedText)}`, '_blank');
-            }
-            lucide.createIcons();
-
-            // 顯示彈窗動畫
-            const modal = document.getElementById('result-modal');
-            const content = document.getElementById('modal-content');
-            modal.classList.remove('hidden');
-            setTimeout(() => {
-                content.classList.remove('scale-95', 'opacity-0');
-                content.classList.add('scale-100', 'opacity-100');
-            }, 10);
-        }
-
-        // 關閉彈窗並恢復相機
-        function closeModalAndResume() {
-            const modal = document.getElementById('result-modal');
-            const content = document.getElementById('modal-content');
-            
-            content.classList.remove('scale-100', 'opacity-100');
-            content.classList.add('scale-95', 'opacity-0');
-            
-            setTimeout(() => {
-                modal.classList.add('hidden');
-                if (html5QrCode) {
-                    html5QrCode.resume(); // 恢復鏡頭實時掃瞄
+                let actionBtn = document.getElementById('action-btn');
+                if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
+                    actionBtn.innerHTML = '<i data-lucide="external-link" class="w-4 h-4"></i> 開啟連結';
+                    actionBtn.onclick = () => window.open(decodedText, '_blank');
+                } else {
+                    actionBtn.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i> 網路搜尋';
+                    actionBtn.onclick = () => window.open(`https://www.google.com/search?q=${encodeURIComponent(decodedText)}`, '_blank');
                 }
-            }, 150);
+                lucide.createIcons();
+
+                // 2.5 秒冷卻時間，防止重複對焦觸發
+                setTimeout(() => { lastResult = ""; }, 2500);
+            }
         }
 
         function initScanner() {
@@ -248,22 +172,22 @@
             .then(() => {
                 const btn = document.getElementById('torch-btn');
                 btn.className = isTorchOn ? 'p-2 bg-indigo-600 text-white rounded-full transition' : 'p-2 bg-slate-800 text-slate-300 rounded-full transition';
-            }).catch(e => showToast("手電筒不支援"));
+            }).catch(e => alert("手電筒控制失敗"));
         }
 
         function scanImageFile(input) {
             if (input.files && input.files[0]) {
                 html5QrCode.scanFile(input.files[0], true)
                 .then(decodedText => {
-                    onScanSuccess(decodedText, { result: { format: { formatName: 'IMAGE_FILE' } } });
+                    onScanSuccess(decodedText, { result: { format: { formatName: 'IMAGE' } } });
                 })
-                .catch(err => showToast("相片中未發現條碼"));
+                .catch(err => alert("相片中未發現條碼"));
             }
         }
 
         function saveToHistory(text, format) {
             scanHistory.unshift({ text, format, time: new Date().toLocaleTimeString() });
-            if (scanHistory.length > 200) scanHistory.pop();
+            if (scanHistory.length > 100) scanHistory.pop();
             localStorage.setItem('scan_history', JSON.stringify(scanHistory));
             renderHistory();
         }
@@ -271,7 +195,7 @@
         function renderHistory() {
             const list = document.getElementById('history-list');
             if (scanHistory.length === 0) {
-                list.innerHTML = `<div class="text-center text-xs text-slate-500 py-12">暫無掃瞄紀錄</div>`;
+                list.innerHTML = `<div class="text-center text-xs text-slate-500 py-12">暫無歷史紀錄</div>`;
                 return;
             }
             list.innerHTML = scanHistory.map((item) => `
@@ -283,7 +207,7 @@
                         </div>
                         <div class="text-xs font-mono text-slate-200 truncate">${item.text}</div>
                     </div>
-                    <button onclick="navigator.clipboard.writeText('${item.text}').then(()=>showToast('已複製！'))" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg shrink-0">
+                    <button onclick="navigator.clipboard.writeText('${item.text}').then(()=>alert('已複製！'))" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg shrink-0">
                         <i data-lucide="copy" class="w-3.5 h-3.5"></i>
                     </button>
                 </div>
@@ -291,29 +215,21 @@
             lucide.createIcons();
         }
 
-        function copyModalText() {
-            navigator.clipboard.writeText(currentScannedText).then(() => showToast('已複製內容！'));
-        }
-
-        function shareModalText() {
-            if (navigator.share) {
-                navigator.share({ title: '條碼內容', text: currentScannedText }).catch(() => {});
-            } else {
-                copyModalText();
-            }
+        function copyResult() {
+            const text = document.getElementById('result-text').innerText;
+            navigator.clipboard.writeText(text).then(() => alert('已複製到剪貼簿！'));
         }
 
         function clearHistory() {
-            if (confirm('確定清空所有紀錄嗎？')) {
+            if (confirm('確定清空歷史紀錄？')) {
                 scanHistory = [];
                 localStorage.removeItem('scan_history');
                 renderHistory();
-                showToast('已清空');
             }
         }
 
         function exportCSV() {
-            if (scanHistory.length === 0) return showToast('無紀錄');
+            if (scanHistory.length === 0) return alert('無紀錄');
             let csvContent = "data:text/csv;charset=utf-8,格式,內容,時間\n";
             scanHistory.forEach(h => {
                 csvContent += `"${h.format}","${h.text.replace(/"/g, '""')}","${h.time}"\n`;
@@ -325,55 +241,24 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            showToast('已匯出 CSV');
-        }
-
-        let qrcodeObj = null;
-        function generateQRCode() {
-            const text = document.getElementById('gen-input').value.trim();
-            const container = document.getElementById('qrcode-container');
-            container.innerHTML = "";
-            if (!text) return;
-            qrcodeObj = new QRCode(container, { text: text, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.H });
-        }
-
-        function downloadQRCode() {
-            const img = document.querySelector('#qrcode-container img');
-            if (!img) return showToast('請先輸入內容');
-            const link = document.createElement('a');
-            link.href = img.src;
-            link.download = 'qrcode.png';
-            link.click();
-            showToast('已下載');
         }
 
         function switchTab(tab) {
             const scanTab = document.getElementById('tab-scan');
-            const genTab = document.getElementById('tab-generate');
             const historyTab = document.getElementById('tab-history');
             const scanBtn = document.getElementById('nav-scan-btn');
-            const genBtn = document.getElementById('nav-gen-btn');
             const historyBtn = document.getElementById('nav-history-btn');
-
-            scanTab.classList.add('hidden');
-            genTab.classList.add('hidden');
-            historyTab.classList.add('hidden');
-            scanBtn.className = "flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200";
-            genBtn.className = "flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200";
-            historyBtn.className = "flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200";
 
             if (tab === 'scan') {
                 scanTab.classList.remove('hidden');
+                historyTab.classList.add('hidden');
                 scanBtn.className = "flex flex-col items-center gap-1 text-indigo-400";
-                if (html5QrCode && !html5QrCode.isScanning) {
-                    html5QrCode.resume();
-                }
-            } else if (tab === 'generate') {
-                genTab.classList.remove('hidden');
-                genBtn.className = "flex flex-col items-center gap-1 text-indigo-400";
+                historyBtn.className = "flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200";
             } else {
+                scanTab.classList.add('hidden');
                 historyTab.classList.remove('hidden');
                 historyBtn.className = "flex flex-col items-center gap-1 text-indigo-400";
+                scanBtn.className = "flex flex-col items-center gap-1 text-slate-400 hover:text-slate-200";
                 renderHistory();
             }
         }
