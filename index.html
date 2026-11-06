@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>全方向 Barcode & QR Scanner</title>
+    <title>高效能條碼掃瞄器</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- 引入穩定的 html5-qrcode 庫 -->
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         body { -webkit-user-select: none; user-select: none; }
@@ -16,50 +17,28 @@
 
     <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
         <h1 class="text-lg font-bold flex items-center gap-2">
-            <i data-lucide="scan-line" class="text-indigo-400"></i> 強力條碼掃瞄器
+            <i data-lucide="scan-line" class="text-indigo-400"></i> 條碼掃瞄器
         </h1>
-        <span class="text-xs px-2 py-1 bg-indigo-500/20 text-indigo-300 rounded-full">支援垂直/全角度</span>
     </header>
 
     <main class="flex-1 flex flex-col p-4 max-w-md mx-auto w-full gap-4 pb-24">
         
-        <div id="scanner-container" class="relative w-full aspect-[3/4] bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col items-center justify-center">
-            <video id="webcam-video" class="absolute inset-0 w-full h-full object-cover" autoplay playsinline muted></video>
-            
-            <!-- 隱藏的 Canvas 用於旋轉畫面進行二次採樣 -->
-            <canvas id="rotate-canvas" class="hidden"></canvas>
-
-            <div class="absolute inset-8 border-2 border-indigo-500/60 rounded-xl pointer-events-none flex items-center justify-center">
-                <!-- 水平與垂直掃瞄導向線 -->
-                <div class="absolute w-full h-0.5 bg-red-500/80 animate-pulse"></div>
-                <div class="absolute h-full w-0.5 bg-red-500/80 animate-pulse"></div>
-            </div>
-
-            <div id="start-screen" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center gap-4 p-6 text-center z-10">
-                <div class="w-16 h-16 bg-indigo-600/20 text-indigo-400 rounded-full flex items-center justify-center border border-indigo-500/30">
-                    <i data-lucide="camera" class="w-8 h-8"></i>
-                </div>
-                <div>
-                    <h2 class="text-base font-semibold">全方向鏡頭掃瞄</h2>
-                    <p class="text-xs text-slate-400 mt-1">支援直向、橫向、PDF417 及各類高密度條碼</p>
-                </div>
-                <button onclick="startScanner()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl shadow-lg transition flex items-center gap-2">
-                    <i data-lucide="play" class="w-4 h-4"></i> 啟動相機
-                </button>
-            </div>
+        <!-- html5-qrcode 專用容器 -->
+        <div class="relative w-full aspect-[3/4] bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col items-center justify-center">
+            <div id="reader" class="w-full h-full"></div>
         </div>
 
         <div id="result-card" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg hidden">
             <div class="flex items-center justify-between mb-2">
-                <span id="result-format" class="text-xs font-semibold px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded">Format</span>
-                <span class="text-xs text-slate-500" id="result-time">剛剛</span>
+                <span id="result-format" class="text-xs font-semibold px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded">格式</span>
+                <span class="text-xs text-slate-500">剛剛</span>
             </div>
             <div class="text-sm font-mono break-all bg-slate-950 p-3 rounded-xl border border-slate-800/80 mb-3 max-h-32 overflow-y-auto" id="result-text">
-                解析結果顯示在此...
+                掃瞄結果...
             </div>
             <div class="flex gap-2">
                 <button id="action-btn" onclick="handleAction()" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition flex items-center justify-center gap-2">
-                    <i data-lucide="external-link" class="w-4 h-4"></i> 開啟 / 搜尋
+                    <i data-lucide="external-link" class="w-4 h-4"></i> 開啟連結
                 </button>
                 <button onclick="copyResult()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl transition flex items-center justify-center">
                     <i data-lucide="copy" class="w-4 h-4"></i>
@@ -70,101 +49,47 @@
 
     <script>
         lucide.createIcons();
+        let lastResult = "";
 
-        let videoElement = document.getElementById('webcam-video');
-        let canvasElement = document.getElementById('rotate-canvas');
-        let canvasCtx = canvasElement.getContext('2d');
-        let mediaStream = null;
-        let barcodeDetector = null;
-        let isScanning = false;
-        let lastScannedText = "";
-        let frameCounter = 0;
+        function onScanSuccess(decodedText, decodedResult) {
+            if (decodedText !== lastResult) {
+                lastResult = decodedText;
+                if (navigator.vibrate) navigator.vibrate(100);
 
-        async function startScanner() {
-            try {
-                if ('BarcodeDetector' in window) {
-                    // 強制要求包含 PDF417 及所有主流 1D 格式
-                    const formats = ['qr_code', 'pdf417', 'code_128', 'code_39', 'code_93', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf', 'aztec', 'data_matrix'];
-                    barcodeDetector = new BarcodeDetector({ formats: formats });
+                document.getElementById('result-card').classList.remove('hidden');
+                document.getElementById('result-format').innerText = decodedResult.result.format.formatName || 'BARCODE';
+                document.getElementById('result-text').innerText = decodedText;
+
+                let actionBtn = document.getElementById('action-btn');
+                if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
+                    actionBtn.innerHTML = '<i data-lucide="external-link" class="w-4 h-4"></i> 開啟連結';
+                    actionBtn.onclick = () => window.open(decodedText, '_blank');
+                } else {
+                    actionBtn.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i> 網路搜尋';
+                    actionBtn.onclick = () => window.open(`https://www.google.com/search?q=${encodeURIComponent(decodedText)}`, '_blank');
                 }
+                lucide.createIcons();
 
-                mediaStream = await navigator.mediaDevices.getUserMedia({
-                    video: { 
-                        facingMode: { ideal: 'environment' },
-                        width: { ideal: 1920 }, // 提高解析度以應對高密度條碼
-                        height: { ideal: 1080 } 
-                    }
-                });
-
-                videoElement.srcObject = mediaStream;
-                await videoElement.play();
-
-                document.getElementById('start-screen').classList.add('hidden');
-                isScanning = true;
-                requestAnimationFrame(scanLoop);
-
-            } catch (err) {
-                alert('相機啟動失敗: ' + err.message);
+                setTimeout(() => { lastResult = ""; }, 3000);
             }
         }
 
-        async function scanLoop() {
-            if (!isScanning) return;
-
-            if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
-                frameCounter++;
-
-                if (barcodeDetector) {
-                    try {
-                        // 1. 原向（0度）試掃
-                        let barcodes = await barcodeDetector.detect(videoElement);
-                        
-                        // 2. 如果原向掃不到，每隔幾幀將圖像旋轉 90 度交給解碼器採樣
-                        if (barcodes.length === 0 && frameCounter % 3 === 0) {
-                            canvasElement.width = videoElement.videoHeight;
-                            canvasElement.height = videoElement.videoWidth;
-                            canvasCtx.translate(canvasElement.width / 2, canvasElement.height / 2);
-                            canvasCtx.rotate(90 * Math.PI / 180);
-                            canvasCtx.drawImage(videoElement, -videoElement.videoWidth / 2, -videoElement.videoHeight / 2);
-                            
-                            barcodes = await barcodeDetector.detect(canvasElement);
-                        }
-
-                        if (barcodes.length > 0) {
-                            const code = barcodes[0];
-                            if (code.rawValue !== lastScannedText) {
-                                lastScannedText = code.rawValue;
-                                onDetected(code.rawValue, code.format);
-                            }
-                        }
-                    } catch (e) {}
-                }
+        // 初始化掃瞄器，強制指定後置鏡頭
+        const html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start(
+            { facingMode: "environment" },
+            {
+                fps: 15,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.333334
+            },
+            onScanSuccess,
+            (errorMessage) => {
+                // 忽略未偵測到時的頻繁錯誤 log
             }
-
-            if (isScanning) {
-                requestAnimationFrame(scanLoop);
-            }
-        }
-
-        function onDetected(text, format) {
-            if (navigator.vibrate) navigator.vibrate(100);
-
-            document.getElementById('result-card').classList.remove('hidden');
-            document.getElementById('result-format').innerText = format.toUpperCase();
-            document.getElementById('result-text').innerText = text;
-            
-            let actionBtn = document.getElementById('action-btn');
-            if (text.startsWith('http://') || text.startsWith('https://')) {
-                actionBtn.innerHTML = '<i data-lucide="external-link" class="w-4 h-4"></i> 開啟連結';
-                actionBtn.onclick = () => window.open(text, '_blank');
-            } else {
-                actionBtn.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i> 網路搜尋';
-                actionBtn.onclick = () => window.open(`https://www.google.com/search?q=${encodeURIComponent(text)}`, '_blank');
-            }
-            lucide.createIcons();
-            
-            setTimeout(() => { lastScannedText = ""; }, 3000);
-        }
+        ).catch(err => {
+            alert("無法啟動相機: " + err);
+        });
 
         function copyResult() {
             const text = document.getElementById('result-text').innerText;
