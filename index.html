@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>SmartScan iOS WebApp</title>
+  
+  <!-- PWA Meta Tags for iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SmartScan">
+  <link rel="apple-touch-icon" href="https://img.icons8.com/isometric/180/qr-code.png">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- HTML5-QRCode Scanner Engine -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- QRCode Generator engine -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            iosBlue: '#007AFF',
+            iosGreen: '#34C759',
+            iosOrange: '#FF9500',
+            iosRed: '#FF3B30',
+            iosGray: '#8E8E93',
+            iosCardDark: '#1C1C1E',
+            iosBgDark: '#000000',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* iOS Safe Area Padding Support */
+    .pb-safe { padding-bottom: max(1.25rem, env(safe-area-inset-bottom)); }
+    .pt-safe { padding-top: max(1rem, env(safe-area-inset-top)); }
+    
+    /* Custom Animations & UI Glow */
+    @keyframes scanBeam {
+      0% { top: 0%; opacity: 0.8; }
+      50% { opacity: 1; }
+      100% { top: 95%; opacity: 0.8; }
+    }
+    .scanner-laser {
+      animation: scanBeam 2s infinite ease-in-out;
+      background: linear-gradient(180deg, rgba(0, 122, 255, 0) 0%, rgba(0, 122, 255, 0.8) 50%, rgba(0, 122, 255, 0) 100%);
+    }
+
+    /* Glassmorphism */
+    .glass-nav {
+      background: rgba(28, 28, 30, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+
+    /* Hide HTML5 QRCode default UI elements dynamically */
+    #qr-reader video {
+      object-fit: cover !important;
+      border-radius: 1.5rem;
+    }
+    #qr-reader {
+      border: none !important;
+    }
+    #qr-reader img[alt="Info icon"], #qr-reader img[alt="Camera menu icon"] {
+      display: none !important;
+    }
+  </style>
+</head>
+<body class="bg-black text-white font-sans antialiased select-none h-screen flex flex-col overflow-hidden">
+
+  <!-- TOP HEADER / APP BAR -->
+  <header class="pt-safe px-5 pb-3 flex items-center justify-between bg-black/60 backdrop-blur-md z-30 border-b border-white/10">
+    <div class="flex items-center space-x-2">
+      <div class="p-2 bg-iosBlue/20 text-iosBlue rounded-xl">
+        <i data-lucide="scan-line" class="w-6 h-6"></i>
+      </div>
+      <h1 class="text-xl font-bold tracking-tight">SmartScan Pro</h1>
+    </div>
+    <div class="flex items-center space-x-3">
+      <button id="btn-batch-toggle" onclick="toggleBatchMode()" class="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center space-x-1 border border-white/20 bg-white/10 text-white/80 transition active:scale-95">
+        <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+        <span id="batch-status-text">單次模式</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT CONTAINER -->
+  <main class="flex-1 relative overflow-hidden flex flex-col justify-center">
+
+    <!-- 1. SCANNER TAB -->
+    <section id="tab-scanner" class="tab-content h-full flex flex-col justify-between p-4 relative">
+      <!-- Camera Preview Box -->
+      <div class="relative w-full flex-1 max-h-[70vh] rounded-3xl overflow-hidden bg-zinc-900 border border-white/10 flex items-center justify-center shadow-2xl">
+        <div id="qr-reader" class="w-full h-full"></div>
+
+        <!-- Scanner Viewfinder Overlay -->
+        <div id="viewfinder" class="absolute inset-0 pointer-events-none flex items-center justify-center">
+          <div class="w-64 h-64 border-2 border-white/30 rounded-3xl relative flex items-center justify-center overflow-hidden shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]">
+            <!-- Corner Markers -->
+            <div class="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-iosBlue rounded-tl-lg"></div>
+            <div class="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-iosBlue rounded-tr-lg"></div>
+            <div class="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-iosBlue rounded-bl-lg"></div>
+            <div class="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-iosBlue rounded-br-lg"></div>
+            <!-- Laser Scanner Line -->
+            <div class="scanner-laser absolute left-0 right-0 h-8"></div>
+          </div>
+        </div>
+
+        <!-- Camera Status Overlay / Hint -->
+        <div id="scanner-hint" class="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full text-xs font-medium text-white/80 border border-white/10">
+          對準 QR Code 或條碼自動掃瞄
+        </div>
+      </div>
+
+      <!-- Scanner Controls -->
+      <div class="mt-4 flex items-center justify-center space-x-6">
+        <button onclick="toggleTorch()" id="btn-torch" class="p-4 bg-zinc-800/80 active:bg-zinc-700 rounded-full border border-white/10 text-white shadow-lg transition active:scale-95">
+          <i data-lucide="zap" class="w-6 h-6"></i>
+        </button>
+        <button onclick="switchCamera()" class="p-4 bg-zinc-800/80 active:bg-zinc-700 rounded-full border border-white/10 text-white shadow-lg transition active:scale-95">
+          <i data-lucide="camera-reverse" class="w-6 h-6"></i>
+        </button>
+        <label class="p-4 bg-zinc-800/80 active:bg-zinc-700 rounded-full border border-white/10 text-white shadow-lg cursor-pointer transition active:scale-95">
+          <i data-lucide="image" class="w-6 h-6"></i>
+          <input type="file" accept="image/*" class="hidden" onchange="scanImageFile(event)">
+        </label>
+      </div>
+    </section>
+
+    <!-- 2. GENERATOR TAB -->
+    <section id="tab-generator" class="tab-content hidden h-full overflow-y-auto p-5 pb-24">
+      <h2 class="text-2xl font-bold mb-4">生成 QR Code</h2>
+      
+      <!-- Type selector buttons -->
+      <div class="grid grid-cols-4 gap-2 mb-4 bg-zinc-900 p-1.5 rounded-2xl border border-white/10">
+        <button onclick="setGenType('text')" id="gen-btn-text" class="gen-type-btn py-2 text-xs font-semibold rounded-xl bg-iosBlue text-white shadow">文字/網址</button>
+        <button onclick="setGenType('wifi')" id="gen-btn-wifi" class="gen-type-btn py-2 text-xs font-semibold rounded-xl text-zinc-400">Wi-Fi</button>
+        <button onclick="setGenType('vcard')" id="gen-btn-vcard" class="gen-type-btn py-2 text-xs font-semibold rounded-xl text-zinc-400">名片</button>
+        <button onclick="setGenType('phone')" id="gen-btn-phone" class="gen-type-btn py-2 text-xs font-semibold rounded-xl text-zinc-400">電話</button>
+      </div>
+
+      <!-- Inputs Container -->
+      <div id="gen-input-box" class="space-y-3 bg-zinc-900 p-4 rounded-2xl border border-white/10">
+        <!-- Dynamic fields will be rendered here -->
+      </div>
+
+      <button onclick="generateQRCode()" class="w-full mt-4 py-3.5 bg-iosBlue hover:bg-blue-600 text-white font-semibold rounded-2xl shadow-lg transition active:scale-98">
+        生成二維碼
+      </button>
+
+      <!-- Result Card -->
+      <div id="gen-result" class="hidden mt-6 p-6 bg-zinc-900 rounded-3xl border border-white/10 flex flex-col items-center justify-center space-y-4">
+        <div id="qrcode-canvas" class="p-3 bg-white rounded-2xl shadow-xl"></div>
+        <div class="flex space-x-3 w-full">
+          <button onclick="downloadGeneratedQR()" class="flex-1 py-2.5 bg-zinc-800 border border-white/10 rounded-xl text-sm font-medium flex items-center justify-center space-x-2 active:bg-zinc-700">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>儲存圖片</span>
+          </button>
+          <button onclick="shareGeneratedQR()" class="flex-1 py-2.5 bg-zinc-800 border border-white/10 rounded-xl text-sm font-medium flex items-center justify-center space-x-2 active:bg-zinc-700">
+            <i data-lucide="share" class="w-4 h-4"></i>
+            <span>分享</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. HISTORY TAB -->
+    <section id="tab-history" class="tab-content hidden h-full overflow-y-auto p-5 pb-24">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold">掃瞄歷史</h2>
+        <div class="flex space-x-2">
+          <button onclick="exportHistoryCSV()" class="p-2 bg-zinc-800 rounded-xl border border-white/10 text-xs font-medium text-white flex items-center space-x-1 active:bg-zinc-700">
+            <i data-lucide="file-spreadsheet" class="w-4 h-4 text-iosGreen"></i>
+            <span>CSV</span>
+          </button>
+          <button onclick="clearHistory()" class="p-2 bg-zinc-800 rounded-xl border border-white/10 text-xs font-medium text-iosRed flex items-center space-x-1 active:bg-zinc-700">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+            <span>清除</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter/Search Bar -->
+      <div class="relative mb-4">
+        <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3 text-zinc-500"></i>
+        <input type="text" id="history-search" oninput="renderHistory()" placeholder="搜尋歷史紀錄..." class="w-full pl-10 pr-4 py-2 bg-zinc-900 border border-white/10 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-iosBlue">
+      </div>
+
+      <!-- List -->
+      <div id="history-list" class="space-y-3">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- 4. SETTINGS TAB -->
+    <section id="tab-settings" class="tab-content hidden h-full overflow-y-auto p-5 pb-24">
+      <h2 class="text-2xl font-bold mb-6">設定</h2>
+      
+      <div class="bg-zinc-900 rounded-2xl border border-white/10 divide-y divide-white/10">
+        <div class="p-4 flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <i data-lucide="volume-2" class="w-5 h-5 text-iosBlue"></i>
+            <span class="text-sm font-medium">掃瞄成功音效</span>
+          </div>
+          <input type="checkbox" id="setting-sound" checked class="w-5 h-5 accent-iosBlue rounded">
+        </div>
+        
+        <div class="p-4 flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <i data-lucide="vibrate" class="w-5 h-5 text-iosOrange"></i>
+            <span class="text-sm font-medium">觸覺震動回饋</span>
+          </div>
+          <input type="checkbox" id="setting-vibrate" checked class="w-5 h-5 accent-iosBlue rounded">
+        </div>
+
+        <div class="p-4 flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <i data-lucide="external-link" class="w-5 h-5 text-iosGreen"></i>
+            <span class="text-sm font-medium">自動開啟 URL 連結</span>
+          </div>
+          <input type="checkbox" id="setting-auto-open" class="w-5 h-5 accent-iosBlue rounded">
+        </div>
+      </div>
+
+      <div class="mt-8 text-center text-xs text-zinc-500">
+        <p>SmartScan WebApp v1.2.0</p>
+        <p class="mt-1">專為 iOS Safari / Safari PWA 優化設計</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- RESULT MODAL (Apple Style Sheet) -->
+  <div id="result-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center hidden transition-opacity duration-300">
+    <div class="w-full sm:max-w-md bg-zinc-900 border-t sm:border border-white/20 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl max-h-[85vh] overflow-y-auto pb-safe">
+      <!-- Top Handle bar for mobile sheet -->
+      <div class="w-12 h-1.5 bg-zinc-700 rounded-full mx-auto mb-4 sm:hidden"></div>
+      
+      <div class="flex items-start justify-between mb-4">
+        <div class="flex items-center space-x-3">
+          <div id="modal-icon-bg" class="p-3 rounded-2xl bg-iosBlue/20 text-iosBlue">
+            <i id="modal-type-icon" data-lucide="qr-code" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <span id="modal-code-type" class="text-xs font-bold text-iosBlue uppercase tracking-wider">QR Code</span>
+            <h3 id="modal-title" class="text-lg font-bold text-white">掃瞄結果</h3>
+          </div>
+        </div>
+        <button onclick="closeResultModal()" class="p-1.5 bg-zinc-800 rounded-full text-zinc-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Result Text Content Box -->
+      <div class="bg-black/50 p-4 rounded-2xl border border-white/10 mb-5 break-all">
+        <p id="modal-content" class="text-sm text-zinc-200 font-mono select-all leading-relaxed"></p>
+      </div>
+
+      <!-- Action Buttons Container -->
+      <div id="modal-actions" class="space-y-2.5">
+        <!-- Action buttons rendered dynamically based on barcode content -->
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM TAB BAR -->
+  <nav class="glass-nav fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 pb-safe">
+    <div class="flex justify-around items-center pt-2 pb-1">
+      <button onclick="switchTab('scanner')" id="nav-scanner" class="tab-btn flex flex-col items-center space-y-1 text-iosBlue">
+        <i data-lucide="scan" class="w-6 h-6"></i>
+        <span class="text-[10px] font-medium">掃瞄器</span>
+      </button>
+      <button onclick="switchTab('generator')" id="nav-generator" class="tab-btn flex flex-col items-center space-y-1 text-zinc-400">
+        <i data-lucide="qr-code" class="w-6 h-6"></i>
+        <span class="text-[10px] font-medium">生成 QR</span>
+      </button>
+      <button onclick="switchTab('history')" id="nav-history" class="tab-btn flex flex-col items-center space-y-1 text-zinc-400">
+        <i data-lucide="history" class="w-6 h-6"></i>
+        <span class="text-[10px] font-medium">歷史紀錄</span>
+      </button>
+      <button onclick="switchTab('settings')" id="nav-settings" class="tab-btn flex flex-col items-center space-y-1 text-zinc-400">
+        <i data-lucide="settings" class="w-6 h-6"></i>
+        <span class="text-[10px] font-medium">設定</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    // --- Global State Variables ---
+    let html5QrcodeScanner = null;
+    let currentCameraId = null;
+    let availableCameras = [];
+    let isTorchOn = false;
+    let isBatchMode = false;
+    let lastScannedText = "";
+    let currentGenType = "text";
+    let qrGeneratorInstance = null;
+
+    // --- Audio Feedback Synth (Web Audio API) ---
+    function playBeepSound() {
+      if (!document.getElementById('setting-sound').checked) return;
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(1046.5, audioCtx.currentTime); // C6 Note
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.15);
+      } catch (e) {
+        console.error("Audio playback error:", e);
+      }
+    }
+
+    function triggerVibration() {
+      if (!document.getElementById('setting-vibrate').checked) return;
+      if (navigator.vibrate) {
+        navigator.vibrate(100);
+      }
+    }
+
+    // --- Tab Navigation ---
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(el => {
+        el.classList.remove('text-iosBlue');
+        el.classList.add('text-zinc-400');
+      });
+
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+      document.getElementById(`nav-${tabId}`).classList.remove('text-zinc-400');
+      document.getElementById(`nav-${tabId}`).classList.add('text-iosBlue');
+
+      if (tabId === 'scanner') {
+        startScanner();
+      } else {
+        stopScanner();
+      }
+
+      if (tabId === 'history') {
+        renderHistory();
+      }
+
+      if (tabId === 'generator' && !qrGeneratorInstance) {
+        setGenType('text');
+      }
+    }
+
+    // --- Scanner Logic ---
+    function startScanner() {
+      if (html5QrcodeScanner) return;
+
+      html5QrcodeScanner = new Html5Qrcode("qr-reader");
+      
+      const config = { 
+        fps: 15, 
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        }
+      };
+
+      Html5Qrcode.getCameras().then(devices => {
+        if (devices && devices.length) {
+          availableCameras = devices;
+          // Prefer back camera
+          const backCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('environment'));
+          currentCameraId = backCam ? backCam.id : devices[0].id;
+
+          html5QrcodeScanner.start(
+            currentCameraId, 
+            config, 
+            onScanSuccess, 
+            onScanFailure
+          ).catch(err => console.error("Start Scanner Error: ", err));
+        }
+      }).catch(err => console.error("Get Cameras Error: ", err));
+    }
+
+    function stopScanner() {
+      if (html5QrcodeScanner) {
+        html5QrcodeScanner.stop().then(() => {
+          html5QrcodeScanner.clear();
+          html5QrcodeScanner = null;
+        }).catch(err => console.error(err));
+      }
+    }
+
+    function switchCamera() {
+      if (!availableCameras || availableCameras.length < 2) return;
+      const currentIndex = availableCameras.findIndex(c => c.id === currentCameraId);
+      const nextIndex = (currentIndex + 1) % availableCameras.length;
+      currentCameraId = availableCameras[nextIndex].id;
+      
+      stopScanner();
+      setTimeout(startScanner, 300);
+    }
+
+    function toggleTorch() {
+      if (!html5QrcodeScanner) return;
+      isTorchOn = !isTorchOn;
+      html5QrcodeScanner.applyVideoConstraints({
+        advanced: [{ torch: isTorchOn }]
+      }).catch(() => {
+        alert("此裝置不支援手電筒控制");
+        isTorchOn = false;
+      });
+    }
+
+    function toggleBatchMode() {
+      isBatchMode = !isBatchMode;
+      const btn = document.getElementById('btn-batch-toggle');
+      const txt = document.getElementById('batch-status-text');
+      if (isBatchMode) {
+        btn.classList.add('bg-iosBlue', 'text-white');
+        btn.classList.remove('bg-white/10', 'text-white/80');
+        txt.innerText = "批量模式 ON";
+      } else {
+        btn.classList.remove('bg-iosBlue', 'text-white');
+        btn.classList.add('bg-white/10', 'text-white/80');
+        txt.innerText = "單次模式";
+      }
+    }
+
+    // --- On Scan Handler ---
+    function onScanSuccess(decodedText, decodedResult) {
+      if (decodedText === lastScannedText && isBatchMode) return; // Prevent duplicate rapid scan in batch
+      lastScannedText = decodedText;
+
+      playBeepSound();
+      triggerVibration();
+
+      const format = decodedResult.result.format ? decodedResult.result.format.formatName : "QR_CODE";
+      
+      saveToHistory(decodedText, format);
+
+      if (document.getElementById('setting-auto-open').checked && isValidURL(decodedText)) {
+        window.open(decodedText, '_blank');
+        return;
+      }
+
+      if (!isBatchMode) {
+        showResultModal(decodedText, format);
+      } else {
+        // Show brief toast notification in batch mode
+        showBatchToast(decodedText);
+      }
+    }
+
+    function onScanFailure(error) {
+      // quiet scan loop errors
+    }
+
+    // Handle Image file upload scanning
+    function scanImageFile(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const html5QrCode = new Html5Qrcode("qr-reader");
+      html5QrCode.scanFile(file, true)
+        .then(decodedText => {
+          onScanSuccess(decodedText, { result: { format: { formatName: "IMAGE_SCAN" } } });
+        })
+        .catch(err => {
+          alert("無法讀取圖片中的條碼或 QR Code");
+        });
+    }
+
+    // --- Batch Toast Notification ---
+    function showBatchToast(text) {
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-iosGreen text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center space-x-2 animate-bounce';
+      toast.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4"></i><span>已掃瞄: ${text.substring(0, 20)}...</span>`;
+      document.body.appendChild(toast);
+      lucide.createIcons();
+      setTimeout(() => toast.remove(), 2000);
+    }
+
+    // --- Result Modal Logic & Parsers ---
+    function showResultModal(content, format) {
+      document.getElementById('modal-content').innerText = content;
+      document.getElementById('modal-code-type').innerText = format || 'BARCODE';
+
+      const actionsContainer = document.getElementById('modal-actions');
+      actionsContainer.innerHTML = '';
+
+      // Determine content type and add smart action buttons
+      if (isValidURL(content)) {
+        setIcon('link', 'iosBlue');
+        actionsContainer.innerHTML += createActionButton('開啟網址', 'external-link', `window.open('${content}', '_blank')`, 'bg-iosBlue text-white');
+      } else if (isProductBarcode(format)) {
+        setIcon('shopping-bag', 'iosOrange');
+        actionsContainer.innerHTML += createActionButton('Google 搜尋商品', 'search', `searchGoogle('${content}')`, 'bg-iosBlue text-white');
+        actionsContainer.innerHTML += createActionButton('HKTVmall / 價格搜尋', 'shopping-cart', `searchProduct('${content}')`, 'bg-iosOrange text-white');
+        actionsContainer.innerHTML += createActionButton('Open Food Facts 查詢', 'database', `searchFoodFacts('${content}')`, 'bg-zinc-800 border border-white/10 text-white');
+      } else if (content.startsWith('WIFI:')) {
+        setIcon('wifi', 'iosGreen');
+        const wifiInfo = parseWifi(content);
+        actionsContainer.innerHTML += `<div class="p-3 bg-zinc-800 rounded-xl text-xs space-y-1 mb-2">
+          <div><span class="text-zinc-400">SSID:</span> ${wifiInfo.ssid}</div>
+          <div><span class="text-zinc-400">密碼:</span> ${wifiInfo.password}</div>
+        </div>`;
+        actionsContainer.innerHTML += createActionButton('複製 Wi-Fi 密碼', 'copy', `copyToClipboard('${wifiInfo.password}')`, 'bg-iosGreen text-white');
+      } else if (content.startsWith('BEGIN:VCARD')) {
+        setIcon('user', 'iosBlue');
+        const vcard = parseVCard(content);
+        actionsContainer.innerHTML += `<div class="p-3 bg-zinc-800 rounded-xl text-xs space-y-1 mb-2">
+          <div><span class="text-zinc-400">姓名:</span> ${vcard.name}</div>
+          <div><span class="text-zinc-400">電話:</span> ${vcard.tel}</div>
+        </div>`;
+        if(vcard.tel) actionsContainer.innerHTML += createActionButton('撥打電話', 'phone', `window.open('tel:${vcard.tel}')`, 'bg-iosGreen text-white');
+      } else {
+        setIcon('text', 'iosGray');
+      }
+
+      // Default Common Actions
+      actionsContainer.innerHTML += createActionButton('複製內容', 'copy', `copyToClipboard('${escapeJsString(content)}')`, 'bg-zinc-800 border border-white/10 text-white');
+      if (navigator.share) {
+        actionsContainer.innerHTML += createActionButton('分享', 'share-2', `shareText('${escapeJsString(content)}')`, 'bg-zinc-800 border border-white/10 text-white');
+      }
+
+      document.getElementById('result-modal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeResultModal() {
+      document.getElementById('result-modal').classList.add('hidden');
+      lastScannedText = "";
+    }
+
+    function createActionButton(label, iconName, onClickJs, styleClasses) {
+      return `
+        <button onclick="${onClickJs}" class="w-full py-3 px-4 rounded-xl text-sm font-semibold flex items-center justify-center space-x-2 transition active:scale-98 ${styleClasses}">
+          <i data-lucide="${iconName}" class="w-4 h-4"></i>
+          <span>${label}</span>
+        </button>
+      `;
+    }
+
+    function setIcon(iconName, colorClass) {
+      const modalIcon = document.getElementById('modal-type-icon');
+      const bg = document.getElementById('modal-icon-bg');
+      modalIcon.setAttribute('data-lucide', iconName);
+      bg.className = `p-3 rounded-2xl bg-${colorClass}/20 text-${colorClass}`;
+      lucide.createIcons();
+    }
+
+    // --- Parsers & Smart Helpers ---
+    function isValidURL(string) {
+      try {
+        const url = new URL(string);
+        return url.protocol === "http:" || url.protocol === "https:";
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function isProductBarcode(format) {
+      const productFormats = ['EAN_13', 'EAN_8', 'UPC_A', 'UPC_E', 'CODE_128'];
+      return productFormats.includes(format);
+    }
+
+    function parseWifi(text) {
+      const ssidMatch = text.match(/S:([^;]+)/);
+      const passMatch = text.match(/P:([^;]+)/);
+      return {
+        ssid: ssidMatch ? ssidMatch[1] : '未知',
+        password: passMatch ? passMatch[1] : ''
+      };
+    }
+
+    function parseVCard(text) {
+      const nameMatch = text.match(/FN:(.+)/);
+      const telMatch = text.match(/TEL.*:(.+)/);
+      return {
+        name: nameMatch ? nameMatch[1].trim() : '未知聯絡人',
+        tel: telMatch ? telMatch[1].trim() : ''
+      };
+    }
+
+    function searchGoogle(query) {
+      window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, '_blank');
+    }
+
+    function searchProduct(query) {
+      window.open(`https://www.google.com/search?tbm=shop&q=${encodeURIComponent(query)}`, '_blank');
+    }
+
+    function searchFoodFacts(barcode) {
+      window.open(`https://world.openfoodfacts.org/product/${barcode}`, '_blank');
+    }
+
+    function copyToClipboard(text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      alert('已複製到剪貼簿！');
+    }
+
+    function shareText(text) {
+      if (navigator.share) {
+        navigator.share({
+          title: 'SmartScan 掃瞄結果',
+          text: text
+        }).catch(() => {});
+      }
+    }
+
+    function escapeJsString(str) {
+      return str.replace(/'/g, "\\'").replace(/\n/g, '\\n');
+    }
+
+    // --- History Management (localStorage) ---
+    function saveToHistory(content, format) {
+      let history = JSON.parse(localStorage.getItem('smartscan_history') || '[]');
+      const newItem = {
+        id: Date.now(),
+        content: content,
+        format: format,
+        timestamp: new Date().toLocaleString('zh-HK')
+      };
+      history.unshift(newItem);
+      if (history.length > 100) history.pop(); // Max 100 items
+      localStorage.setItem('smartscan_history', JSON.stringify(history));
+    }
+
+    function renderHistory() {
+      const historyList = document.getElementById('history-list');
+      const searchQuery = document.getElementById('history-search').value.toLowerCase();
+      let history = JSON.parse(localStorage.getItem('smartscan_history') || '[]');
+
+      if (searchQuery) {
+        history = history.filter(item => item.content.toLowerCase().includes(searchQuery) || item.format.toLowerCase().includes(searchQuery));
+      }
+
+      if (history.length === 0) {
+        historyList.innerHTML = `<div class="text-center py-12 text-zinc-500 text-sm">無掃瞄紀錄</div>`;
+        return;
+      }
+
+      historyList.innerHTML = history.map(item => `
+        <div onclick="showResultModal('${escapeJsString(item.content)}', '${item.format}')" class="p-4 bg-zinc-900 border border-white/10 rounded-2xl flex items-center justify-between active:bg-zinc-800 cursor-pointer">
+          <div class="flex items-center space-x-3 overflow-hidden">
+            <div class="p-2.5 bg-zinc-800 rounded-xl text-iosBlue shrink-0">
+              <i data-lucide="${isValidURL(item.content) ? 'link' : 'barcode'}" class="w-5 h-5"></i>
+            </div>
+            <div class="overflow-hidden">
+              <div class="flex items-center space-x-2">
+                <span class="text-[10px] font-bold px-2 py-0.5 bg-iosBlue/20 text-iosBlue rounded-full uppercase">${item.format}</span>
+                <span class="text-[10px] text-zinc-500">${item.timestamp}</span>
+              </div>
+              <p class="text-sm font-medium text-white truncate mt-1">${item.content}</p>
+            </div>
+          </div>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-zinc-600 shrink-0"></i>
+        </div>
+      `).join('');
+      
+      lucide.createIcons();
+    }
+
+    function clearHistory() {
+      if (confirm('確定要清除所有掃瞄歷史紀錄嗎？')) {
+        localStorage.removeItem('smartscan_history');
+        renderHistory();
+      }
+    }
+
+    function exportHistoryCSV() {
+      let history = JSON.parse(localStorage.getItem('smartscan_history') || '[]');
+      if (history.length === 0) {
+        alert('沒有歷史紀錄可供導出');
+        return;
+      }
+
+      let csvContent = "data:text/csv;charset=utf-8,格式,內容,時間\n";
+      history.forEach(item => {
+        csvContent += `"${item.format}","${item.content.replace(/"/g, '""')}","${item.timestamp}"\n`;
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `smartscan_history_${Date.now()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // --- QR Code Generator Tab Logic ---
+    function setGenType(type) {
+      currentGenType = type;
+      document.querySelectorAll('.gen-type-btn').forEach(b => {
+        b.classList.remove('bg-iosBlue', 'text-white', 'shadow');
+        b.classList.add('text-zinc-400');
+      });
+      document.getElementById(`gen-btn-${type}`).classList.add('bg-iosBlue', 'text-white', 'shadow');
+      document.getElementById(`gen-btn-${type}`).classList.remove('text-zinc-400');
+
+      const box = document.getElementById('gen-input-box');
+      if (type === 'text') {
+        box.innerHTML = `<textarea id="gen-input-text" rows="3" placeholder="輸入網址或一般文字..." class="w-full bg-transparent border-none text-sm text-white focus:outline-none resize-none"></textarea>`;
+      } else if (type === 'wifi') {
+        box.innerHTML = `
+          <input type="text" id="gen-wifi-ssid" placeholder="Wi-Fi 名稱 (SSID)" class="w-full py-2 bg-zinc-800 px-3 rounded-xl text-sm border border-white/10 text-white">
+          <input type="password" id="gen-wifi-pass" placeholder="Wi-Fi 密碼" class="w-full py-2 bg-zinc-800 px-3 rounded-xl text-sm border border-white/10 text-white">
+        `;
+      } else if (type === 'vcard') {
+        box.innerHTML = `
+          <input type="text" id="gen-card-name" placeholder="姓名" class="w-full py-2 bg-zinc-800 px-3 rounded-xl text-sm border border-white/10 text-white">
+          <input type="tel" id="gen-card-tel" placeholder="電話號碼" class="w-full py-2 bg-zinc-800 px-3 rounded-xl text-sm border border-white/10 text-white">
+          <input type="email" id="gen-card-email" placeholder="電郵地址" class="w-full py-2 bg-zinc-800 px-3 rounded-xl text-sm border border-white/10 text-white">
+        `;
+      } else if (type === 'phone') {
+        box.innerHTML = `<input type="tel" id="gen-input-phone" placeholder="輸入電話號碼..." class="w-full py-2 bg-zinc-800 px-3 rounded-xl text-sm border border-white/10 text-white">`;
+      }
+    }
+
+    function generateQRCode() {
+      let qrText = "";
+      if (currentGenType === 'text') {
+        qrText = document.getElementById('gen-input-text').value;
+      } else if (currentGenType === 'wifi') {
+        const s = document.getElementById('gen-wifi-ssid').value;
+        const p = document.getElementById('gen-wifi-pass').value;
+        qrText = `WIFI:S:${s};T:WPA;P:${p};;`;
+      } else if (currentGenType === 'vcard') {
+        const n = document.getElementById('gen-card-name').value;
+        const t = document.getElementById('gen-card-tel').value;
+        const e = document.getElementById('gen-card-email').value;
+        qrText = `BEGIN:VCARD\nVERSION:3.0\nFN:${n}\nTEL:${t}\nEMAIL:${e}\nEND:VCARD`;
+      } else if (currentGenType === 'phone') {
+        qrText = `TEL:${document.getElementById('gen-input-phone').value}`;
+      }
+
+      if (!qrText.trim()) {
+        alert('請輸入生成內容！');
+        return;
+      }
+
+      const qrContainer = document.getElementById('qrcode-canvas');
+      qrContainer.innerHTML = '';
+      
+      new QRCode(qrContainer, {
+        text: qrText,
+        width: 200,
+        height: 200,
+        colorDark : "#000000",
+        colorLight : "#ffffff",
+        correctLevel : QRCode.CorrectLevel.H
+      });
+
+      document.getElementById('gen-result').classList.remove('hidden');
+    }
+
+    function downloadGeneratedQR() {
+      const img = document.querySelector('#qrcode-canvas img');
+      if (img) {
+        const link = document.createElement('a');
+        link.download = 'qrcode.png';
+        link.href = img.src;
+        link.click();
+      }
+    }
+
+    function shareGeneratedQR() {
+      const img = document.querySelector('#qrcode-canvas img');
+      if (img && navigator.share) {
+        fetch(img.src)
+          .then(res => res.blob())
+          .then(blob => {
+            const file = new File([blob], 'qrcode.png', { type: 'image/png' });
+            navigator.share({
+              files: [file],
+              title: '分享 QR Code'
+            });
+          });
+      }
+    }
+
+    // --- Initialization ---
+    window.onload = function() {
+      lucide.createIcons();
+      startScanner();
+    };
+  </script>
+</body>
+</html>
